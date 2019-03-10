@@ -33,7 +33,7 @@ func Run(port string, configFile string) {
 	router.HandleFunc("/room/{room}/game/{id}", deleteGame).Methods("DELETE")
 
 	log.Println("Running on " + port)
-	log.Println(http.ListenAndServe("127.0.0.1:" + port, router))
+	log.Println(http.ListenAndServe("127.0.0.1:"+port, router))
 }
 
 /*GET*/
@@ -74,7 +74,7 @@ func getBoardGames(w http.ResponseWriter, r *http.Request) {
 		boardGames, err := SearchBoardGames(query, int(limit), int(roomId))
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-		}else {
+		} else {
 			if err = json.NewEncoder(w).Encode(boardGames); err != nil {
 				log.Println(err)
 			}
@@ -85,7 +85,7 @@ func getBoardGames(w http.ResponseWriter, r *http.Request) {
 func getRoom(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	var (
-		err error
+		err       error
 		retErrors []retError
 	)
 	w.Header().Set("Content-Type", "application/json")
@@ -98,13 +98,13 @@ func getRoom(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		bgRoom, err := GetRoom(room, true)
-		if err != nil{
+		if err != nil {
 			retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
 			w.WriteHeader(http.StatusBadRequest)
 			if err = json.NewEncoder(w).Encode(retErrors); err != nil {
 				log.Println(err)
 			}
-		}else{
+		} else {
 			err = json.NewEncoder(w).Encode(bgRoom)
 			if err != nil {
 				log.Println(err)
@@ -116,15 +116,15 @@ func getRoom(w http.ResponseWriter, r *http.Request) {
 /*POST*/
 func addGame(w http.ResponseWriter, r *http.Request) {
 	var (
-		err error
-		newGame Game
+		err       error
+		newGame   Game
 		retErrors []retError
 	)
 	params := mux.Vars(r)
 	decoder := json.NewDecoder(r.Body)
 	roomName := params["room"]
 	w.Header().Set("Content-Type", "application/json")
-	if err = decoder.Decode(&newGame); err != nil{
+	if err = decoder.Decode(&newGame); err != nil {
 		log.Println(err)
 	}
 
@@ -139,7 +139,7 @@ func addGame(w http.ResponseWriter, r *http.Request) {
 	boardGame, err := getBoardGame(newGame.Game.Id)
 	if err != nil && err == sql.ErrNoRows {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: "Invalid boardGame.id"})
-	}else if err != nil{
+	} else if err != nil {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
 	}
 
@@ -153,7 +153,7 @@ func addGame(w http.ResponseWriter, r *http.Request) {
 		if err = room.AddGame(&newGame); err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
-		}else {
+		} else {
 			w.WriteHeader(http.StatusCreated)
 			err = json.NewEncoder(w).Encode(newGame)
 			if err != nil {
@@ -164,9 +164,9 @@ func addGame(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func addPlayer(w http.ResponseWriter, r *http.Request){
+func addPlayer(w http.ResponseWriter, r *http.Request) {
 	var (
-		err error
+		err       error
 		newPlayer Player
 		retErrors []retError
 	)
@@ -174,7 +174,7 @@ func addPlayer(w http.ResponseWriter, r *http.Request){
 	decoder := json.NewDecoder(r.Body)
 	roomName := params["room"]
 	w.Header().Set("Content-Type", "application/json")
-	if err = decoder.Decode(&newPlayer); err != nil{
+	if err = decoder.Decode(&newPlayer); err != nil {
 		log.Println(err)
 	}
 	if newPlayer.Name == "" {
@@ -182,7 +182,7 @@ func addPlayer(w http.ResponseWriter, r *http.Request){
 	}
 
 	if newPlayer.Color == "" {
-		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail:  "Missing color"})
+		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: "Missing color"})
 	}
 
 	if err = validator.Validate(newPlayer); err != nil {
@@ -202,7 +202,7 @@ func addPlayer(w http.ResponseWriter, r *http.Request){
 		if err = room.AddPlayer(&newPlayer); err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
-		}else {
+		} else {
 			w.WriteHeader(http.StatusCreated)
 			err = json.NewEncoder(w).Encode(newPlayer)
 			if err != nil {

@@ -14,18 +14,18 @@ type Config struct {
 
 var (
 	cfg Config
-	db *sql.DB
+	db  *sql.DB
 )
 
-func initConfig(configFile string) error{
+func initConfig(configFile string) error {
 	file, err := os.Open(configFile)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	decoder := json.NewDecoder(file)
 	defer file.Close()
 	cfg = Config{}
-	if err = decoder.Decode(&cfg); err != nil{
+	if err = decoder.Decode(&cfg); err != nil {
 		return err
 	}
 	if err = validator.Validate(cfg); err != nil {

@@ -9,17 +9,16 @@ import (
 	"time"
 )
 
-
 type BoardGame struct {
 	Id   uint64 `json:"id" validate:"nonzero"`
 	Name string `json:"name"`
 }
 
 type Player struct {
-	Id       uint64 `json:"id,omitempty"`
+	Id       uint64    `json:"id,omitempty"`
 	JoinTime time.Time `json:"joinTime,omitempty"`
-	Name     string `json:"name"`
-	Color    string `json:"color"`
+	Name     string    `json:"name"`
+	Color    string    `json:"color"`
 }
 
 type GamePlayer struct {
@@ -42,10 +41,10 @@ type room struct {
 	Games      []Game    `json:"games"`
 }
 
-func (r *room) GetPlayer(playerId uint64) (*Player, error){
+func (r *room) GetPlayer(playerId uint64) (*Player, error) {
 
-	for _, player := range r.Players{
-		if player.Id == playerId{
+	for _, player := range r.Players {
+		if player.Id == playerId {
 			return &player, nil
 		}
 	}
@@ -72,7 +71,7 @@ func (r *room) AddPlayer(player *Player) error {
 	res, err := db.Exec("INSERT INTO Player(room_id, name, color) VALUES (?, ?, ?)", r.Id, player.Name, player.Color)
 	if err != nil {
 		return err
-	}else {
+	} else {
 		playerId, err := res.LastInsertId()
 		if err != nil {
 			return err
@@ -101,7 +100,7 @@ func (r *room) AddGame(game *Game) error {
 	if err != nil {
 		_ = tx.Rollback()
 		return err
-	}else {
+	} else {
 		gameId, err = res.LastInsertId()
 		if err != nil {
 			_ = tx.Rollback()
@@ -150,7 +149,7 @@ func addRoom(hash string) (*room, error) {
 
 func GetRoom(name string, create bool) (*room, error) {
 	var (
-		count int
+		count      int
 		roomId     uint64
 		roomHash   string
 		createTime time.Time
@@ -169,7 +168,7 @@ func GetRoom(name string, create bool) (*room, error) {
 	if count == 0 {
 		if create {
 			return addRoom(hexHash)
-		}else{
+		} else {
 			return nil, errors.New("could not find room")
 		}
 	}
@@ -190,7 +189,7 @@ func GetRoom(name string, create bool) (*room, error) {
 		playerId   uint64
 		playerName string
 		color      string
-		joinTime time.Time
+		joinTime   time.Time
 	)
 	rows, err := db.Query(`SELECT player_id, name, color, join_time FROM Player WHERE room_id = ?`, room.Id)
 	if err != nil {
@@ -203,16 +202,16 @@ func GetRoom(name string, create bool) (*room, error) {
 		if err != nil {
 			return nil, err
 		}
-		player := Player{Id:playerId, Name:playerName, Color:color, JoinTime:joinTime}
+		player := Player{Id: playerId, Name: playerName, Color: color, JoinTime: joinTime}
 		room.Players = append(room.Players, player)
 	}
 
 	// Get games
 	var (
-		gameId   uint64
+		gameId      uint64
 		boardgameId uint64
-		gameTime time.Time
-		points int
+		gameTime    time.Time
+		points      int
 	)
 	rows, err = db.Query(`SELECT game_id, boardgame_id, game_time FROM Game WHERE room_id = ?`, room.Id)
 	if err != nil {
@@ -236,26 +235,26 @@ func GetRoom(name string, create bool) (*room, error) {
 		// For json purposes this is initialised
 		gamePlayers := []GamePlayer{}
 		for gpRows.Next() {
-			if err := gpRows.Scan(&playerId, &points); err != nil{
+			if err := gpRows.Scan(&playerId, &points); err != nil {
 				return nil, err
 			}
 			player, err := room.GetPlayer(playerId)
-			if err != nil{
+			if err != nil {
 				return nil, err
 			}
-			gamePlayer := GamePlayer{Player:*player, Points:points}
+			gamePlayer := GamePlayer{Player: *player, Points: points}
 			gamePlayers = append(gamePlayers, gamePlayer)
 		}
 		gpRows.Close()
 
-		game := Game{Id:gameId, GameTime:gameTime, Game:*boardGame, GamePlayers:gamePlayers}
+		game := Game{Id: gameId, GameTime: gameTime, Game: *boardGame, GamePlayers: gamePlayers}
 		room.Games = append(room.Games, game)
 	}
 
 	return room, nil
 }
 
-func getBoardGame(id uint64) (*BoardGame, error){
+func getBoardGame(id uint64) (*BoardGame, error) {
 	var (
 		err  error
 		name string
@@ -282,7 +281,7 @@ func SearchBoardGames(search string, limit int, roomId int) ([]BoardGame, error)
 	if db == nil {
 		connect()
 	}
-	if roomId != 0{
+	if roomId != 0 {
 		query = `SELECT DISTINCT boardgame_id, name FROM (
   					SELECT boardgame_id, name, 1 AS sort_score 
 					FROM Game 
@@ -296,7 +295,7 @@ func SearchBoardGames(search string, limit int, roomId int) ([]BoardGame, error)
 					LIMIT ?
 				) X`
 		params = append(params, search, search, limit)
-	}else{
+	} else {
 		query = `SELECT boardgame_id, name 
 				FROM BoardGame 
 				WHERE name LIKE CONCAT('%', ?, '%')
