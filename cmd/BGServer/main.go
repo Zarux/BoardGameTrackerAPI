@@ -4,6 +4,7 @@ import (
 	"flag"
 	"github.com/Zarux/BGServer/internal/app/BGServer"
 	"log"
+	"os"
 )
 
 var (
@@ -13,6 +14,7 @@ var (
 
 func main() {
 	log.SetFlags(log.Lshortfile | log.Ldate | log.Ltime)
+	log.SetOutput(os.Stdout)
 	flag.Parse()
 	BGServer.Run(*port, *configFile)
 }

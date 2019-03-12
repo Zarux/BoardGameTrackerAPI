@@ -5,7 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	_ "github.com/go-sql-driver/mysql"
-	"log"
+	"sort"
+	"sync"
 	"time"
 )
 
@@ -56,8 +57,7 @@ func (r *room) EditPlayer(player *Player) error {
 	if db == nil {
 		connect()
 	}
-	_, err := db.Exec(`UPDATE Player SET name=?, color=? 
-							WHERE room_id = ? AND player_id = ?`, player.Name, player.Color, r.Id, player.Id)
+	_, err := db.Exec(`UPDATE Player SET name=?, color=? WHERE room_id = ? AND player_id = ?`, player.Name, player.Color, r.Id, player.Id)
 	if err != nil {
 		return err
 	}
@@ -184,73 +184,110 @@ func GetRoom(name string, create bool) (*room, error) {
 	games := []Game{}
 	room := &room{Id: roomId, Hash: roomHash, CreateTime: createTime, Players: players, Games: games}
 
-	// Get players
 	var (
-		playerId   uint64
-		playerName string
-		color      string
-		joinTime   time.Time
+		playerId       uint64
+		playerName     string
+		color          string
+		joinTime       time.Time
+		wg             sync.WaitGroup
+		goRoutineError error
 	)
-	rows, err := db.Query(`SELECT player_id, name, color, join_time FROM Player WHERE room_id = ?`, room.Id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
 
-	for rows.Next() {
-		err := rows.Scan(&playerId, &playerName, &color, &joinTime)
+	// Get players
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		rows, err := db.Query(`SELECT player_id, name, color, join_time FROM Player WHERE room_id = ?`, room.Id)
 		if err != nil {
-			return nil, err
+			goRoutineError = err
+			return
 		}
-		player := Player{Id: playerId, Name: playerName, Color: color, JoinTime: joinTime}
-		room.Players = append(room.Players, player)
-	}
+		defer rows.Close()
+
+		for rows.Next() {
+			err := rows.Scan(&playerId, &playerName, &color, &joinTime)
+			if err != nil {
+				goRoutineError = err
+				return
+			}
+			player := Player{Id: playerId, Name: playerName, Color: color, JoinTime: joinTime}
+			room.Players = append(room.Players, player)
+		}
+	}()
 
 	// Get games
-	var (
-		gameId      uint64
-		boardgameId uint64
-		gameTime    time.Time
-		points      int
-	)
-	rows, err = db.Query(`SELECT game_id, boardgame_id, game_time FROM Game WHERE room_id = ?`, room.Id)
-	if err != nil {
-		return nil, err
-	}
+	wg.Add(1)
+	go func() {
+		var (
+			gameId      uint64
+			boardgameId uint64
+			gameTime    time.Time
+			points      int
+		)
+		defer wg.Done()
+		rows, err := db.Query(`SELECT game_id, boardgame_id, game_time FROM Game WHERE room_id = ?`, room.Id)
+		if err != nil {
+			goRoutineError = err
+			return
+		}
+		defer rows.Close()
 
-	for rows.Next() {
-		err := rows.Scan(&gameId, &boardgameId, &gameTime)
-		if err != nil {
-			return nil, err
-		}
-		boardGame, err := getBoardGame(boardgameId)
-		if err != nil {
-			return nil, err
-		}
-
-		gpRows, err := db.Query(`SELECT player_id, points FROM GamePlayers WHERE game_id = ?`, gameId)
-		if err != nil {
-			return nil, err
-		}
-		// For json purposes this is initialised
-		gamePlayers := []GamePlayer{}
-		for gpRows.Next() {
-			if err := gpRows.Scan(&playerId, &points); err != nil {
-				return nil, err
-			}
-			player, err := room.GetPlayer(playerId)
+		for rows.Next() {
+			err := rows.Scan(&gameId, &boardgameId, &gameTime)
 			if err != nil {
-				return nil, err
+				goRoutineError = err
+				return
 			}
-			gamePlayer := GamePlayer{Player: *player, Points: points}
-			gamePlayers = append(gamePlayers, gamePlayer)
+
+			wg.Add(1)
+			go func(gameId uint64, boardgameId uint64, gameTime time.Time) {
+				boardGame, err := getBoardGame(boardgameId)
+				if err != nil {
+					goRoutineError = err
+					return
+				}
+				// For json purposes this is initialised
+				gamePlayers := []GamePlayer{}
+				defer wg.Done()
+				gpRows, err := db.Query(`SELECT player_id, points FROM GamePlayers WHERE game_id = ?`, gameId)
+				if err != nil {
+					goRoutineError = err
+					return
+				}
+
+				for gpRows.Next() {
+					if err := gpRows.Scan(&playerId, &points); err != nil {
+						goRoutineError = err
+						return
+					}
+					player, err := room.GetPlayer(playerId)
+					if err != nil {
+						goRoutineError = err
+						return
+					}
+					gamePlayer := GamePlayer{Player: *player, Points: points}
+					gamePlayers = append(gamePlayers, gamePlayer)
+				}
+				gpRows.Close()
+				sort.Slice(gamePlayers, func(i, j int) bool {
+					if gamePlayers[i].Points != gamePlayers[j].Points {
+						return gamePlayers[i].Points < gamePlayers[j].Points
+					}
+					return gamePlayers[i].Player.Name < gamePlayers[j].Player.Name
+				})
+				game := Game{Id: gameId, GameTime: gameTime, Game: *boardGame, GamePlayers: gamePlayers}
+				room.Games = append(room.Games, game)
+			}(gameId, boardgameId, gameTime)
 		}
-		gpRows.Close()
+	}()
 
-		game := Game{Id: gameId, GameTime: gameTime, Game: *boardGame, GamePlayers: gamePlayers}
-		room.Games = append(room.Games, game)
+	wg.Wait()
+	if goRoutineError != nil {
+		return nil, goRoutineError
 	}
-
+	sort.Slice(room.Games, func(i, j int) bool {
+		return room.Games[i].GameTime.After(room.Games[j].GameTime)
+	})
 	return room, nil
 }
 

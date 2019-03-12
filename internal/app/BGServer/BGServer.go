@@ -3,11 +3,14 @@ package BGServer
 import (
 	"database/sql"
 	"encoding/json"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"gopkg.in/validator.v2"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 )
 
 type retError struct {
@@ -15,10 +18,28 @@ type retError struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+func handlerHandler (router http.Handler) http.Handler{
+	router = handlers.LoggingHandler(os.Stdout, router)
+	return handlers.RecoveryHandler()(router)
+}
+
 func Run(port string, configFile string) {
 	if err := initConfig(configFile); err != nil {
 		log.Fatal(err)
 	}
+
+	keepAliveDB := time.NewTicker(10 * time.Minute)
+	go func() {
+		for range keepAliveDB.C {
+			if db != nil {
+				err := db.Ping()
+				log.Println("Pinging database")
+				if err != nil{
+					panic("database not responding")
+				}
+			}
+		}
+	}()
 
 	router := mux.NewRouter()
 	router.HandleFunc("/boardGames", getBoardGames).Methods("GET")
@@ -33,7 +54,7 @@ func Run(port string, configFile string) {
 	router.HandleFunc("/room/{room}/game/{id}", deleteGame).Methods("DELETE")
 
 	log.Println("Running on " + port)
-	log.Println(http.ListenAndServe("127.0.0.1:"+port, router))
+	log.Println(http.ListenAndServe("127.0.0.1:"+port, handlerHandler(router)))
 }
 
 /*GET*/
@@ -99,11 +120,8 @@ func getRoom(w http.ResponseWriter, r *http.Request) {
 	} else {
 		bgRoom, err := GetRoom(room, true)
 		if err != nil {
-			retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
-			w.WriteHeader(http.StatusBadRequest)
-			if err = json.NewEncoder(w).Encode(retErrors); err != nil {
-				log.Println(err)
-			}
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
 		} else {
 			err = json.NewEncoder(w).Encode(bgRoom)
 			if err != nil {
