@@ -23,12 +23,20 @@ func handlerHandler (router http.Handler) http.Handler{
 	return handlers.RecoveryHandler()(router)
 }
 
+func headerMiddleware(next http.Handler) http.Handler{
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func Run(port string, configFile string) {
 	if err := initConfig(configFile); err != nil {
 		log.Fatal(err)
 	}
 
-	keepAliveDB := time.NewTicker(10 * time.Minute)
+	keepAliveDB := time.NewTicker(1 * time.Hour)
 	go func() {
 		for range keepAliveDB.C {
 			if db != nil {
@@ -42,6 +50,7 @@ func Run(port string, configFile string) {
 	}()
 
 	router := mux.NewRouter()
+	router.Use(headerMiddleware)
 	router.HandleFunc("/boardGames", getBoardGames).Methods("GET")
 	router.HandleFunc("/room/{room}", getRoom).Methods("GET")
 
@@ -54,7 +63,7 @@ func Run(port string, configFile string) {
 	router.HandleFunc("/room/{room}/game/{id}", deleteGame).Methods("DELETE")
 
 	log.Println("Running on " + port)
-	log.Println(http.ListenAndServe("127.0.0.1:"+port, handlerHandler(router)))
+	log.Println(http.ListenAndServe(":"+port, handlerHandler(router)))
 }
 
 /*GET*/
@@ -69,7 +78,7 @@ func getBoardGames(w http.ResponseWriter, r *http.Request) {
 	roomIdStr := params.Get("room")
 	limit := int64(100)
 	roomId := int64(0)
-	w.Header().Set("Content-Type", "application/json")
+
 	if limitStr != "" {
 		limit, err = strconv.ParseInt(limitStr, 10, 0)
 		if err != nil {
@@ -109,7 +118,7 @@ func getRoom(w http.ResponseWriter, r *http.Request) {
 		err       error
 		retErrors []retError
 	)
-	w.Header().Set("Content-Type", "application/json")
+
 	room := params["room"]
 	if room == "" {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: "Missing room"})
@@ -141,7 +150,7 @@ func addGame(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	decoder := json.NewDecoder(r.Body)
 	roomName := params["room"]
-	w.Header().Set("Content-Type", "application/json")
+
 	if err = decoder.Decode(&newGame); err != nil {
 		log.Println(err)
 	}
@@ -191,16 +200,12 @@ func addPlayer(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	decoder := json.NewDecoder(r.Body)
 	roomName := params["room"]
-	w.Header().Set("Content-Type", "application/json")
+
 	if err = decoder.Decode(&newPlayer); err != nil {
 		log.Println(err)
 	}
 	if newPlayer.Name == "" {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: "Missing name"})
-	}
-
-	if newPlayer.Color == "" {
-		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: "Missing color"})
 	}
 
 	if err = validator.Validate(newPlayer); err != nil {

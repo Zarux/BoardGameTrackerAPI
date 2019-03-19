@@ -87,7 +87,10 @@ func (r *room) EditGame(game *Game) error {
 }
 
 func (r *room) AddGame(game *Game) error {
-	var gameId int64
+	var (
+		gameId int64
+		wg sync.WaitGroup
+	)
 	if db == nil {
 		connect()
 	}
@@ -110,10 +113,21 @@ func (r *room) AddGame(game *Game) error {
 
 	game.Id = uint64(gameId)
 	game.GameTime = time.Now()
+	gamePlayers := []GamePlayer{}
 	if len(game.GamePlayers) > 0 {
 		query := "INSERT INTO GamePlayers(game_id, player_id, points) VALUES"
 		var values []interface{}
 		for _, gamePlayer := range game.GamePlayers {
+			wg.Add(1)
+			go func(gPlayer GamePlayer) {
+				var name string
+				defer wg.Done()
+				err := db.QueryRow("SELECT name FROM Player WHERE player_id = ? AND room_id = ?", gPlayer.Player.Id, r.Id).Scan(&name)
+				if err == nil {
+					gPlayer.Player.Name = name
+				}
+				gamePlayers = append(gamePlayers, gPlayer)
+			}(gamePlayer)
 			query += "(?, ?, ?),"
 			values = append(values, gameId, gamePlayer.Player.Id, gamePlayer.Points)
 		}
@@ -126,6 +140,14 @@ func (r *room) AddGame(game *Game) error {
 			return err
 		}
 	}
+	wg.Wait()
+	game.GamePlayers = gamePlayers
+	sort.Slice(game.GamePlayers, func(i, j int) bool {
+		if game.GamePlayers[i].Points != game.GamePlayers[j].Points {
+			return game.GamePlayers[i].Points > game.GamePlayers[j].Points
+		}
+		return game.GamePlayers[i].Player.Name < game.GamePlayers[j].Player.Name
+	})
 	return tx.Commit()
 }
 
@@ -271,7 +293,7 @@ func GetRoom(name string, create bool) (*room, error) {
 				gpRows.Close()
 				sort.Slice(gamePlayers, func(i, j int) bool {
 					if gamePlayers[i].Points != gamePlayers[j].Points {
-						return gamePlayers[i].Points < gamePlayers[j].Points
+						return gamePlayers[i].Points > gamePlayers[j].Points
 					}
 					return gamePlayers[i].Player.Name < gamePlayers[j].Player.Name
 				})
@@ -345,7 +367,8 @@ func SearchBoardGames(search string, limit int, roomId int) ([]BoardGame, error)
 		return nil, err
 	}
 	defer rows.Close()
-
+	// Initialized for json purposes
+	boardGames = []BoardGame{}
 	for rows.Next() {
 		err := rows.Scan(&id, &name)
 		if err != nil {
