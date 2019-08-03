@@ -1,4 +1,4 @@
-package BGServer
+package server
 
 import (
 	"crypto/md5"
@@ -89,7 +89,7 @@ func (r *room) EditGame(game *Game) error {
 func (r *room) AddGame(game *Game) error {
 	var (
 		gameId int64
-		wg sync.WaitGroup
+		wg     sync.WaitGroup
 	)
 	if db == nil {
 		connect()
@@ -169,7 +169,7 @@ func addRoom(hash string) (*room, error) {
 	return newRoom, nil
 }
 
-func GetRoom(name string, create bool) (*room, error) {
+func GetRoomInfo(name string, create bool) (*room, error) {
 	var (
 		count      int
 		roomId     uint64

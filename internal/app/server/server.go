@@ -1,4 +1,4 @@
-package BGServer
+package server
 
 import (
 	"database/sql"
@@ -18,12 +18,12 @@ type retError struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-func handlerHandler (router http.Handler) http.Handler{
+func handlerHandler(router http.Handler) http.Handler {
 	router = handlers.LoggingHandler(os.Stdout, router)
 	return handlers.RecoveryHandler()(router)
 }
 
-func headerMiddleware(next http.Handler) http.Handler{
+func headerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -31,10 +31,7 @@ func headerMiddleware(next http.Handler) http.Handler{
 	})
 }
 
-func Run(port string, configFile string) {
-	if err := initConfig(configFile); err != nil {
-		log.Fatal(err)
-	}
+func Run(port string) {
 
 	keepAliveDB := time.NewTicker(1 * time.Hour)
 	go func() {
@@ -42,7 +39,7 @@ func Run(port string, configFile string) {
 			if db != nil {
 				err := db.Ping()
 				log.Println("Pinging database")
-				if err != nil{
+				if err != nil {
 					panic("database not responding")
 				}
 			}
@@ -51,14 +48,14 @@ func Run(port string, configFile string) {
 
 	router := mux.NewRouter()
 	router.Use(headerMiddleware)
-	router.HandleFunc("/boardGames", getBoardGames).Methods("GET")
-	router.HandleFunc("/room/{room}", getRoom).Methods("GET")
+	router.HandleFunc("/boardGames", GetBoardGames).Methods("GET")
+	router.HandleFunc("/room/{room}", GetRoom).Methods("GET")
 
-	router.HandleFunc("/room/{room}/player", addPlayer).Methods("POST")
+	router.HandleFunc("/room/{room}/player", AddPlayer).Methods("POST")
 	router.HandleFunc("/room/{room}/player/{id}", editPlayer).Methods("PUT")
 	router.HandleFunc("/room/{room}/player/{id}", deletePlayer).Methods("DELETE")
 
-	router.HandleFunc("/room/{room}/game", addGame).Methods("POST")
+	router.HandleFunc("/room/{room}/game", AddGame).Methods("POST")
 	router.HandleFunc("/room/{room}/game/{id}", editGame).Methods("PUT")
 	router.HandleFunc("/room/{room}/game/{id}", deleteGame).Methods("DELETE")
 
@@ -67,7 +64,7 @@ func Run(port string, configFile string) {
 }
 
 /*GET*/
-func getBoardGames(w http.ResponseWriter, r *http.Request) {
+func GetBoardGames(w http.ResponseWriter, r *http.Request) {
 	var (
 		err       error
 		retErrors []retError
@@ -112,7 +109,7 @@ func getBoardGames(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getRoom(w http.ResponseWriter, r *http.Request) {
+func GetRoom(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	var (
 		err       error
@@ -127,7 +124,7 @@ func getRoom(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 	} else {
-		bgRoom, err := GetRoom(room, true)
+		bgRoom, err := GetRoomInfo(room, true)
 		if err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -141,7 +138,7 @@ func getRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 /*POST*/
-func addGame(w http.ResponseWriter, r *http.Request) {
+func AddGame(w http.ResponseWriter, r *http.Request) {
 	var (
 		err       error
 		newGame   Game
@@ -158,7 +155,7 @@ func addGame(w http.ResponseWriter, r *http.Request) {
 	if err = validator.Validate(newGame); err != nil {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
 	}
-	room, err := GetRoom(roomName, false)
+	room, err := GetRoomInfo(roomName, false)
 	if err != nil {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
 	}
@@ -191,7 +188,7 @@ func addGame(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func addPlayer(w http.ResponseWriter, r *http.Request) {
+func AddPlayer(w http.ResponseWriter, r *http.Request) {
 	var (
 		err       error
 		newPlayer Player
@@ -211,7 +208,7 @@ func addPlayer(w http.ResponseWriter, r *http.Request) {
 	if err = validator.Validate(newPlayer); err != nil {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
 	}
-	room, err := GetRoom(roomName, false)
+	room, err := GetRoomInfo(roomName, false)
 	if err != nil {
 		retErrors = append(retErrors, retError{Code: http.StatusBadRequest, Detail: err.Error()})
 	}

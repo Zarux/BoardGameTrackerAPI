@@ -1,0 +1,37 @@
+language: go
+
+go:
+  - 1.12.x
+
+go_import_path: github.com/Zarux/BGServer
+
+addons:
+  apt:
+    packages:
+      - sshpass
+
+services:
+  - docker
+
+env:
+  - GO111MODULE=on
+
+before_install:
+  - docker build --no-cache -t zarux/bgserver:${TRAVIS_COMMIT} .
+  - docker run -e "DSN_MAIN=$TRAVIS_DSN_MAIN" zarux/bgserver:${TRAVIS_COMMIT} ./main.test
+  - docker run -d -p 8080:8080 zarux/bgserver:${TRAVIS_COMMIT}
+
+script:
+  - curl 127.0.0.1:8080 || exit 1
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+  - docker push zarux/bgserver:${TRAVIS_COMMIT}
+
+deploy:
+  - provider: script
+    script: bash scripts/deploy.sh travis prod
+    on:
+      branch: master
+  - provider: script
+    script: bash scripts/deploy.sh travis dev
+    on:
+      branch: develop
