@@ -30,8 +30,8 @@ deploy:
   - provider: script
     script: bash scripts/deploy.sh travis prod
     on:
-      condition: $TRAVIS_BRANCH == "master"
+      branch: master
   - provider: script
     script: bash scripts/deploy.sh travis dev
     on:
-      condition: $TRAVIS_BRANCH == "develop"
+      branch: develop
