@@ -29,7 +29,9 @@ script:
 deploy:
   - provider: script
     script: bash scripts/deploy.sh travis prod
+    on:
+      condition: $TRAVIS_BRANCH == "master"
   - provider: script
     script: bash scripts/deploy.sh travis dev
     on:
-      branch: develop
+      condition: $TRAVIS_BRANCH == "develop"
