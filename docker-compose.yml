@@ -1,0 +1,13 @@
+version: "3"
+services:
+  BGServer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DSN_MAIN=${DSN_MAIN}
+    image: zarux/bgserver
+    command: ./main
+    restart: on-failure
+    ports:
+      - 8080:8080

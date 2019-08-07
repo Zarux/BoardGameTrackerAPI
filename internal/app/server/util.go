@@ -1,8 +1,7 @@
-package BGServer
+package server
 
 import (
 	"database/sql"
-	"encoding/json"
 	"gopkg.in/validator.v2"
 	"log"
 	"os"
@@ -17,24 +16,32 @@ var (
 	db  *sql.DB
 )
 
-func initConfig(configFile string) error {
-	file, err := os.Open(configFile)
-	if err != nil {
-		return err
+func GetConfig() Config {
+	if cfg == (Config{}) {
+		err := InitConfig()
+		if err != nil {
+			log.Println(err)
+			return Config{}
+		}
 	}
-	decoder := json.NewDecoder(file)
-	defer file.Close()
+	return cfg
+}
+
+func InitConfig() error {
 	cfg = Config{}
-	if err = decoder.Decode(&cfg); err != nil {
-		return err
+	cfg.DSN = os.Getenv("DSN_MAIN")
+	if cfg.DSN == "" {
+		log.Fatal("missing environment variable DSN_MAIN")
 	}
-	if err = validator.Validate(cfg); err != nil {
+
+	if err := validator.Validate(cfg); err != nil {
 		return err
 	}
 	return nil
 }
 
 func connect() *sql.DB {
+	cfg = GetConfig()
 	var err error
 	if db != nil {
 		return db
