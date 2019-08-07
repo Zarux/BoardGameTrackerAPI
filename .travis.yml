@@ -29,8 +29,6 @@ script:
 deploy:
   - provider: script
     script: bash scripts/deploy.sh travis prod
-    on:
-      branch: master
   - provider: script
     script: bash scripts/deploy.sh travis dev
     on:
