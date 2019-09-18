@@ -100,7 +100,7 @@ Getting room information
 ```
 {  
     "name": string,
-    "color"?: string
+    "color": string
 }
 ```
 
