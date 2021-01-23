@@ -216,92 +216,80 @@ func GetRoomInfo(name string, create bool) (*room, error) {
 	)
 
 	// Get players
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		rows, err := db.Query(`SELECT player_id, name, color, join_time FROM Player WHERE room_id = ?`, room.Id)
-		if err != nil {
-			goRoutineError = err
-			return
-		}
-		defer rows.Close()
+	rows, err := db.Query(`SELECT player_id, name, color, join_time FROM Player WHERE room_id = ?`, room.Id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-		for rows.Next() {
-			err := rows.Scan(&playerId, &playerName, &color, &joinTime)
-			if err != nil {
-				goRoutineError = err
-				return
-			}
-			player := Player{Id: playerId, Name: playerName, Color: color, JoinTime: joinTime}
-			room.Players = append(room.Players, player)
+	for rows.Next() {
+		err := rows.Scan(&playerId, &playerName, &color, &joinTime)
+		if err != nil {
+			return nil, err
 		}
-	}()
+		player := Player{Id: playerId, Name: playerName, Color: color, JoinTime: joinTime}
+		room.Players = append(room.Players, player)
+	}
 
 	// Get games
-	wg.Add(1)
-	go func() {
-		var (
-			gameId      uint64
-			boardgameId uint64
-			gameTime    time.Time
-			points      int
-		)
-		defer wg.Done()
-		rows, err := db.Query(`SELECT game_id, boardgame_id, game_time FROM Game WHERE room_id = ?`, room.Id)
-		if err != nil {
-			goRoutineError = err
-			return
-		}
-		defer rows.Close()
+	var (
+		gameId      uint64
+		boardgameId uint64
+		gameTime    time.Time
+		points      int
+	)
+	rows, err = db.Query(`SELECT game_id, boardgame_id, game_time FROM Game WHERE room_id = ?`, room.Id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-		for rows.Next() {
-			err := rows.Scan(&gameId, &boardgameId, &gameTime)
+	for rows.Next() {
+		err := rows.Scan(&gameId, &boardgameId, &gameTime)
+		if err != nil {
+			return nil, err
+		}
+
+		wg.Add(1)
+		go func(gameId uint64, boardgameId uint64, gameTime time.Time) {
+			boardGame, err := getBoardGame(boardgameId)
+			if err != nil {
+				goRoutineError = err
+				return
+			}
+			// For json purposes this is initialised
+			gamePlayers := []GamePlayer{}
+			defer wg.Done()
+			gpRows, err := db.Query(`SELECT player_id, points FROM GamePlayers WHERE game_id = ?`, gameId)
 			if err != nil {
 				goRoutineError = err
 				return
 			}
 
-			wg.Add(1)
-			go func(gameId uint64, boardgameId uint64, gameTime time.Time) {
-				boardGame, err := getBoardGame(boardgameId)
+			for gpRows.Next() {
+				if err := gpRows.Scan(&playerId, &points); err != nil {
+					goRoutineError = err
+					return
+				}
+				player, err := room.GetPlayer(playerId)
 				if err != nil {
 					goRoutineError = err
 					return
 				}
-				// For json purposes this is initialised
-				gamePlayers := []GamePlayer{}
-				defer wg.Done()
-				gpRows, err := db.Query(`SELECT player_id, points FROM GamePlayers WHERE game_id = ?`, gameId)
-				if err != nil {
-					goRoutineError = err
-					return
+				gamePlayer := GamePlayer{Player: *player, Points: points}
+				gamePlayers = append(gamePlayers, gamePlayer)
+			}
+			gpRows.Close()
+			sort.Slice(gamePlayers, func(i, j int) bool {
+				if gamePlayers[i].Points != gamePlayers[j].Points {
+					return gamePlayers[i].Points > gamePlayers[j].Points
 				}
-
-				for gpRows.Next() {
-					if err := gpRows.Scan(&playerId, &points); err != nil {
-						goRoutineError = err
-						return
-					}
-					player, err := room.GetPlayer(playerId)
-					if err != nil {
-						goRoutineError = err
-						return
-					}
-					gamePlayer := GamePlayer{Player: *player, Points: points}
-					gamePlayers = append(gamePlayers, gamePlayer)
-				}
-				gpRows.Close()
-				sort.Slice(gamePlayers, func(i, j int) bool {
-					if gamePlayers[i].Points != gamePlayers[j].Points {
-						return gamePlayers[i].Points > gamePlayers[j].Points
-					}
-					return gamePlayers[i].Player.Name < gamePlayers[j].Player.Name
-				})
-				game := Game{Id: gameId, GameTime: gameTime, Game: *boardGame, GamePlayers: gamePlayers}
-				room.Games = append(room.Games, game)
-			}(gameId, boardgameId, gameTime)
-		}
-	}()
+				return gamePlayers[i].Player.Name < gamePlayers[j].Player.Name
+			})
+			game := Game{Id: gameId, GameTime: gameTime, Game: *boardGame, GamePlayers: gamePlayers}
+			room.Games = append(room.Games, game)
+		}(gameId, boardgameId, gameTime)
+	}
 
 	wg.Wait()
 	if goRoutineError != nil {
